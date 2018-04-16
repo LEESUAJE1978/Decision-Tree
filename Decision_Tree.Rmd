@@ -1,0 +1,122 @@
+---
+title: "Decision_Tree"
+author: "LEESUJAE"
+date: "2018년 4월 16일"
+output:
+  html_document: default
+  pdf_document: default
+---
+###데이터 출처
+###Titanic: Machine Learning from Disaster, https://www.kaggle.com/c/titanic/data
+
+###0. require library
+```{r setup, include=FALSE}
+require(rpart)
+require(rpart.plot)
+require(rattle)
+require(dplyr)
+require(readr)
+require(doBy)
+require(reshape2)
+require(ggplot2)
+require(caret)
+require(e1071)
+
+```
+
+###1. Data load
+```{r}
+titanic<-read_csv("D:/R_File/Decision-Tree/titanic_data.csv")
+```
+
+###2.데이터 탐색 및 필요 변수 생성 
+```{r cars}
+glimpse(titanic) # 891개 Obs, 12개 변수
+titanic$Cabin_Derived<-ifelse(!(is.na(titanic$Cabin)), "Cabin","Passenger")# 승객, 승무원 구분을 위해 생성 
+
+```
+
+###2.1.선실등급별 생존률: 1등실의 승객의 생존율이 2,3등실보다 높음, 선택
+```{r }
+addmargins(prop.table(table(titanic$Pclass, titanic$Survived)))
+ggplot(titanic,aes(x=Pclass,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+###2.2.성별 생존율: 여성이 남성보다 생존 비율이 높음, 선택
+```{r}
+addmargins(prop.table(table(titanic$Sex, titanic$Survived)))
+ggplot(titanic,aes(x=Sex,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+###2.3.나이별 생존율:나이가 어리거나 젊은 사람이 생존율이 높음, 선택
+```{r}
+addmargins(prop.table(table(titanic$Age, titanic$Survived)))
+ggplot(titanic,aes(x=Age,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+###2.4.형제자매 동승자 생존율: 특이점 발견 못함, 미선택
+```{r}
+addmargins(prop.table(table(titanic$Parch, titanic$Survived)))
+ggplot(titanic,aes(x=SibSp,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+###2.5.부모자식 동승자 생존율: 특이점 발견 못함 미선택
+```{r}
+addmargins(prop.table(table(titanic$Parch, titanic$Survived)))
+ggplot(titanic,aes(x=Parch,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+###2.6. 요금에 따른 생존율:특이점 발견 못함 미선택
+```{r}
+addmargins(prop.table(table(titanic$Fare, titanic$Survived)))
+```
+
+###2.7. 승선지역에 따른 생존율: C지역 승선객들의 생존 비율이 높은 것으로 나타남. 선택
+```{r}
+addmargins(prop.table(table(titanic$Embarked, titanic$Survived)))
+ggplot(titanic,aes(x=Embarked,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))
+```
+
+###2.8.승선지역과 승선등급별 생존율:승선지역과 승선등급은 생존여부에 영향을 미치는 것으로 판단.
+```{r}
+ggplot(titanic,aes(x=Pclass,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+facet_wrap(~Embarked)+theme_bw()
+```
+
+###2.9 승무원 생존율: 승무원의 생존율이 높음. 선택
+```{r}
+addmargins(prop.table(table(titanic$Cabin_Derived, titanic$Survived)))
+ggplot(titanic,aes(x=Cabin_Derived,fill=factor(Survived)))+geom_bar(aes(y=(..count..)/sum(..count..)))+theme_bw()
+```
+
+
+###3. Train(791 obs) & Test(100 obs) Data Set 생성
+```{r}
+set.seed(9999)
+samp<-sample(nrow(titanic), 791, replace = F) 
+train<-titanic[samp,]
+test<-titanic[-samp,]
+```
+
+###4.Decision Tree 만들기 
+```{r}
+fit <- rpart(Survived ~., data=subset(train,!is.na(Age),select=c(Survived,Pclass,Sex,Age,Embarked,Cabin_Derived)), minbucket =20) #생존에 영향을 미치는 변수로 Age, Pclass(선실등급), 성별, 승선도시, 승무원 여부 등 5개 선택
+summary(fit)
+fancyRpartPlot(fit)
+```
+###선택변수가 생존 여부에 미치는중요도는 성별이 57, 선실등급이 20, 승무원여부가 11, 나이가 10, 승선도시가 1로 나타남
+
+###5. Prediction : test 데이터로 예측모델을 활용하여 생존 예측 값 생ㅅ
+```{r}
+pred<-predict(fit, newdata=test)
+
+print(pred)
+```
+
+###6. 모델 Validation
+```{r}
+test$Survived_pred<-ifelse(predict(fit,newdata=test)>0.5,1,0)
+test$Survived_pred_prob<-predict(fit,newdata=test)
+confusionMatrix(as.factor(test$Survived_pred),as.factor(test$Survived)) #실제 생존자와 예측 모델을 통한 생존자 비교
+```
+###모델의 생존예측 정확율은 0.79 임.
+
